@@ -1,0 +1,45 @@
+##The Following code belongs to CDAC,KP,Bengaluru and should not be reproduced elsewhere in any format.
+from pyspark.sql import SQLContext
+from pyspark.sql.types import *
+##Initializing the SparkContext for the application
+sqlContext =SQLContext(sc)
+from pyspark.sql.functions import *
+##Reading the Data Traffic File
+df = sqlContext.read.format('com.databricks.spark.csv').load('/home/rohitbhattacharya/Documents/Python_Scripts_Traffic/result.csv',\
+...                             header = 'true', inferSchema = 'true')
+##Checking the Schema Data Types
+df.dtypes
+##Converting the datatypes of Schema Column to Double as Spark Ml works with Double Data Type only
+df = df.withColumn("Id",df.Id.cast(DoubleType()))
+df = df.withColumn("Month",df.Month.cast(DoubleType()))
+df = df.withColumn("Hour",df.Hour.cast(DoubleType()))
+df = df.withColumn("Minute",df.Minute.cast(DoubleType()))
+df = df.withColumn("Label",df.Label.cast(DoubleType()))
+#Specifying the columns which will serve as feature vectore
+numeric_cols = ['Id','Day','Month','Origin_longitude','Origin_latitude','Destination_Longitude','Destination_Latitude','Total Distance','Hour','Minute']
+from pyspark.ml.feature import StringIndexer
+from pyspark.ml.feature import VectorAssembler
+##Vectorizing the Features to a singleColumn named Features
+assembler = VectorAssembler(inputCols = numeric_cols, outputCol = 'features')
+from pyspark.ml import Pipeline
+from pyspark.ml.classfier import DecisionTreeClassifiation
+from pyspark.ml.classification import DecisionTreeClassifier
+##Building the classifier for Decision Tree Model, with the mentioned column for the Label and the column for the Features
+classifier = DecisionTreeClassifier(labelCol = 'Label', featuresCol = 'features')
+##building the Pipeline which consists of the stages of assembler and classifier
+pipeline = Pipeline(stages = [assembler,classifier])
+##Splitting the data into test and train
+(train,test) = df.randomSplit([0.7,0.3])
+##Fitting the model on the test data
+model  = pipeline.fit(train)
+##Transforming the test Data with the the model built previously
+predictions = model.transform(test)
+predictions.show()
+predictions.select('prediction','Label','features').show(20)
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+##buiding an evaluator to test the accuracy of our model
+evaluator =  MulticlassClassificationEvaluator(labelCol = 'label' , predictionCol = 'prediction',metricName = 'accuracy')
+accuracy = evaluator.evaluate(predictions)
+print("TestError = %g " %(1.0 - accuracy))
+##Gives the specification about the Decision Tree Model 
+model.stages[2]
